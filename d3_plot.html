@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <style>
-
 svg {
   font: 10px sans-serif;
 }
@@ -23,114 +22,124 @@ svg {
   fill-opacity: .125;
   shape-rendering: crispEdges;
 }
-
 </style>
 <body>
 <script src="./js/d3.min.js"></script>
 <script>
 
 // 1. Define the margin and size of the svg canvas.
-var margin = {top: 10, right: 10, bottom: 100, left: 40},
-    margin2 = {top: 430, right: 10, bottom: 20, left: 40},
-    width = 960 - margin.left - margin.right,
-    height = 500 - margin.top - margin.bottom,
-    height2 = 500 - margin2.top - margin2.bottom;
+var size = {w: 960, h: 500},
+    size2 = {w: 960, h: 100},
+
+    margin = {top: 10, right: 10, bottom: 20, left: 100},
+    margin2 = {top: 10, right: 10, bottom: 20, left: 100},
+
+    width = size.w - margin.left - margin.right,
+    height = size.h - margin.top - margin.bottom,
+    width2 = size2.w - margin2.left - margin2.right,
+    height2 = size2.h - margin2.top - margin2.bottom;
 
 var sci_notation = d3.format("e");
 
 // 2. Config the scale of the axis.
 // The domain will be specified when loading the data.
 var scale_x = d3.scale.linear().range([0, width]),
-    scale_x2 = d3.scale.linear().range([0, width]),
     scale_y = d3.scale.linear().range([height, 0]),
+
+    scale_x2 = d3.scale.linear().range([0, width]),
     scale_y2 = d3.scale.linear().range([height2, 0]);
 
 var xAxis = d3.svg.axis().scale(scale_x).orient("bottom"),
-    xAxis2 = d3.svg.axis().scale(scale_x2).orient("bottom"),
-    yAxis = d3.svg.axis().scale(scale_y).orient("left").tickFormat(sci_notation);
+    yAxis = d3.svg.axis().scale(scale_y).orient("left").tickFormat(sci_notation),
+
+    xAxis2 = d3.svg.axis().scale(scale_x2).orient("bottom");
+    
 
 var brush = d3.svg.brush()
               .x(scale_x2)
               .on("brush", brushed);
 
-//var area = d3.svg.area()
-//    .interpolate("monotone")
-//    .x(function(d) { return x(d.MZ); })
-//    .y0(height)
-//    .y1(function(d) { return y(d.Intensity); });
+var zoom = d3.behavior.zoom()
+             .y(scale_y)
+             .on("zoom", zoomed);
 
-var svg = d3.select("body").append("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom);
+var svg = d3.select("body")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .call(zoom);
+
+    svg2 = d3.select("body")
+            .append("svg")
+            .attr("width", width2 + margin2.left + margin2.right)
+            .attr("height", height2 + margin2.top + margin2.bottom);
 
 // It constrains the region where the data can be visualized.
 // Any element beyond that is not visualized.
-svg.append("defs").append("clipPath")
-    .attr("id", "clip")
-    .append("rect")
-    .attr("width", width)
-    .attr("height", height);
+svg.append("defs")
+   .append("clipPath")
+   .attr("id", "clip")
+   .append("rect")
+   .attr("width", width)
+   .attr("height", height);
+   
 
 var focus = svg.append("g")
-    .attr("class", "focus")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+               .attr("class", "focus")
+               .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-var context = svg.append("g")
-                 .attr("class", "context")
-                 .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
+var context = svg2.append("svg")
+                  .append("g")
+                  .attr("class", "context")
+                  .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
 
 // Modify: the data should be loaded based on event.
 d3.tsv("./data/dp15_5_NETD.mini.txt", type, function(error, data) {
 
-	scale_x.domain([0, d3.max(data.map(function(d) { return d.MZ; }))]);
-	//console.log(scale_x.domain());
-	scale_y.domain([0, d3.max(data.map(function(d) { return d.Intensity; }))]);
-	//console.log(scale_y.domain());
-
+  scale_x.domain([0, d3.max(data.map(function(d) { return d.MZ; }))]);
+  scale_y.domain([0, d3.max(data.map(function(d) { return d.Intensity; }))]);
   scale_x2.domain(scale_x.domain());
   scale_y2.domain(scale_y.domain());
-	
-	// The group of axis x
-	focus.append("g")
-    .attr("class", "x axis")
-    .attr("transform", "translate(0," + height + ")")
-    .call(xAxis);
-	
-	// The group of axis y	  
-	focus.append("g")
-    .attr("class", "y axis")
-    .call(yAxis);
-	
-	focus.append("g")
-		.attr("class", "peak")
-		//.attr("transform", "translate(0, " +　height + ")")
-		.selectAll("line")
-		.data(data).enter().append("line")
-		.filter(function(d) { return scale_y2(d.Intensity) > 1;})  // selecting data that are proper for plotting.
-		.attr("class", "filtered")
-		.attr("x1", function(d) {return scale_x(d.MZ);})
-		.attr("y1", function(d) {return scale_y(d.Intensity);})
-		.attr("x2", function(d) {return scale_x(d.MZ);})
-		.attr("y2", function(d) {return height;});	
+  
+  // The group of axis x
+  focus.append("g")
+       .attr("class", "x axis")
+       .attr("transform", "translate(0," + height + ")")
+       .call(xAxis);
+  
+  // The group of axis y    
+  focus.append("g")
+       .attr("class", "y axis")
+       .call(yAxis);
+  
+  focus.append("g")
+       .attr("class", "peak")
+       .selectAll("line")
+       .data(data).enter().append("line")
+       .filter(function(d) { return scale_y2(d.Intensity) > 1;})  // selecting data that are proper for plotting.
+       .attr("class", "filtered")
+       .attr("x1", function(d) {return scale_x(d.MZ);})
+       .attr("y1", function(d) {return scale_y(d.Intensity);})
+       .attr("x2", function(d) {return scale_x(d.MZ);})
+       .attr("y2", function(d) {return height;});  
 
 
   // The group of axis x
   context.append("g")
-    .attr("class", "x axis")
-    .attr("transform", "translate(0," + height2 + ")")
-    .call(xAxis);
+         .attr("class", "x axis")
+         .attr("transform", "translate(0," + height2 + ")")
+         .call(xAxis);
   
 
   context.append("g")
-    .attr("class", "peak")
-    //.attr("transform", "translate(0, " +　height + ")")
-    .selectAll("line")
-    .data(data).enter().append("line")
-    .filter(function(d) { return scale_y2(d.Intensity) > 1;})  // selecting data that are proper for plotting.
-    .attr("class", "filtered")
-    .attr("x1", function(d) {return scale_x2(d.MZ);})
-    .attr("y1", function(d) {return scale_y2(d.Intensity);})
-    .attr("x2", function(d) {return scale_x2(d.MZ);})
+         .attr("class", "peak")
+         .selectAll("line")
+         .data(data).enter().append("line")
+         .filter(function(d) { return scale_y2(d.Intensity) > 1;})  // selecting data that are proper for plotting.
+         .attr("class", "filtered")
+         .attr("x1", function(d) {return scale_x2(d.MZ);})
+         .attr("y1", function(d) {return scale_y2(d.Intensity);})
+         .attr("x2", function(d) {return scale_x2(d.MZ);})
     .attr("y2", function(d) {return height2;});  
   
   context.append("g")
@@ -147,7 +156,17 @@ function brushed() {
   
   focus.select(".peak")
        .selectAll("line")
-       .filter(function(d) { return scale_y2(d.Intensity) > 1;})  // selecting data that are proper for plotting.
+       .attr("x1", null)
+       .attr("y1", null)
+       .attr("x2", null)
+       .attr("y2", null); 
+
+  brush_left = brush.extent()[0];
+  brush_right = brush.extent()[1];
+
+  focus.select(".peak")
+       .selectAll("line")
+       .filter(function(d) { return d.MZ > brush_left && d.MZ < brush_right && scale_y(d.Intensity) > 1;})  // selecting data that are proper for plotting.
        .attr("class", "filtered")
        .attr("x1", function(d) {return scale_x(d.MZ);})
        .attr("y1", function(d) {return scale_y(d.Intensity);})
@@ -155,6 +174,20 @@ function brushed() {
        .attr("y2", function(d) {return height;});  
   
   focus.select(".x.axis").call(xAxis);
+}
+
+function zoomed() {
+    focus.select(".y.axis").call(yAxis);
+   
+    focus.select(".peak")
+         .selectAll("line")
+         .filter(function(d) { return scale_y(d.Intensity) > 10;})  // selecting data that are proper for plotting.
+         .attr("class", "filtered")
+         .attr("x1", function(d) {return scale_x(d.MZ);})
+         .attr("y1", function(d) {return scale_y(d.Intensity);})
+         .attr("x2", function(d) {return scale_x(d.MZ);})
+         .attr("y2", function(d) {return height;});  
+
 }
 
 function type(d) {
