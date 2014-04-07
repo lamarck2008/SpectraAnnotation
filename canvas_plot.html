@@ -3,6 +3,7 @@
 <style>
 
 svg {
+	position:absolute;
   font: 10px sans-serif;
 }
 
@@ -23,180 +24,286 @@ svg {
   fill-opacity: .125;
   shape-rendering: crispEdges;
 }
+.expandable-panel {
+    width:100%; 
+    position:relative;
+    min-height:50px;
+    overflow:auto;
+    margin-bottom: 20px;
+    border:1px solid #999;
+} 
 
 </style>
 
 <body>
 <div>
-<input type="file", id="file"><br>
+<input type="file", id="spectrum" multiple>
+<input type="file", id="assignment">
 <button id ="parseFile"> Parse File(s)</button><br>
-<canvas id="canvas"></canvas>
 </div>
 <script src="./js/d3.min.js"></script>
+<script src="./js/crossfilter.min.js"></script>
 <script src="./js/jquery-2.1.0.min.js"></script>
-<script src="./js/fabric.min.js"></script>
 <script src="./js/jquery.parse.min.js"></script>
 
 <script>
-var width = 960,
-	height = 500,
-	margin = {top: 10, right: 10, bottom: 100, left: 40},
-	margin2 = {top: 430, right: 10, bottom: 20, left: 40};
-	//width = 960 - margin.left - margin.right,
-	//height = 500 - margin.top - margin.bottom,
-	//height2 = 500 - margin2.top - margin2.bottom;
-
-function SvgObj(size) {
-	// Default parameter for width and height of the canvas.
-	this.y_notation = d3.format("e");
-	
-	this.width = width - size.left - size.right;	
-	this.height = height - size.top - size.bottom;
-	
-	this.scale_x = d3.scale.linear().range([0, this.getWidth]);
-	this.scale_y = d3.scale.linear().range([this.getHeight, 0]);
-
-	this.xAxis = d3.svg.axis().scale(this.scale_x).orient("bottom");
-	this.yAxis = d3.svg.axis().scale(this.scale_y).orient("left").tickFormat(this.y_notation);
-	
-	this.updateMarginalWidth = function(w) {
-		this.width = w - size.left - size.right;
-	}
-	this.updateMarginalHeight = function(h) {
-		this.height = h - size.top - size.bottom;
-	}
-
-	this.createSVG = function(data, selection, svg_class) {
-		// 1. data is an object for passing the information.
-		// 2. selection is for selected object in the document.
-		// 3. svg_class is for the class of the svg element.  It is usually for differentiation 
-		// between multiple svg elements.
-		console.log("Data", data);
-		console.log("Width", this.width);
-		console.log("Height", this.height);
-		
-		// Create svg canvas
-		var svg = selection.append("svg")
-			.attr("class", svg_class)
-			.attr("width", this.width)
-			.attr("height", this.height);
-			
-		// Adjust the origin of the coordinates.
-		svg.append("g")
-			.attr("class", "framework")
-			.attr("transform", "translate(" + size.left + "," + size.top + ")");
-		
-		// Update the domain of axis
-		this.scale_x.domain([0.9 * d3.min(data.rows.map(function(d) { return d["MZ"]; })), 1.1 * d3.max(data.rows.map(function(d) { return d["MZ"]; }))]);
-		this.scale_y.domain([0, 1.1 * d3.max(data.rows.map(function(d) { return d["Intensity"]; }))]);
-		
-		svg.append("g")
-			.attr("class", "x axis")
-			.attr("transform", "translate(0," + height + ")")
-			.call(this.xAxis);
-		
-		// The group of axis y	  
-		svg.append("g")
-			.attr("class", "y axis")
-			.call(this.yAxis);
-		
-	}
-}
 
 $(function() {
+	var size1 = {w: 960, h: 500},
+	size2 = {w: 960, h: 100},
+	margin = {top: 10, right: 10, bottom: 20, left: 100};
+	width = size1.w - margin.left - margin.right;
+	global_scale_x = d3.scale.linear().range([0, width]);
+	var ppm = 1;
+	//var focus_canvas = new fabric.Canvas('focus_canvas');
+	//var context_canvas = new fabric.Canvas('context_canvas');
 	
 	// 1. Load data
 	$('#parseFile').click( function() {
-		$('input[type=file]').parse({
+		// a. Load the spectrum data.
+		$('#spectrum:file').parse({
 			config: {
 				delimiter: "\t"
 			},
 			complete: function(data) {
-
-				svgFramework(data.results);
+				// data_filter organizes the data in an high efficient way.
+				var data_filter = crossfilter(data.results.rows);
+				console.log("data object:", data);
 				
-				render(data.results);
+				d3.select("div#focus_plot").remove();
+				d3.select("div#context_plot").remove();
+				var selection1 = d3.select('body').append('div')
+									.attr("id", "focus_plot")
+									.attr("class", ".expandable-panel");
+				var focus_plot = new multiPlot(data.results, selection1, size1, "focus");
+
+				var selection2 = d3.select('body').append('div')
+									.attr("id", "context_plot")
+									.attr("class", ".expandable-panel");
+				var context_plot = new multiPlot(data.results, selection2, size2, "context");
+				
+				// Svg for controlling => Svg for plotting.
+				context_plot.addBrush(focus_plot);
+				
+				// b. Load the assignment data.
+				console.log("Data size:", data_filter.size());
+				
+				// Check the dimension of MZ
+				var dataByMZ = data_filter.dimention(function(d) {return d.MZ;});
+				
+				$('#assignment:file').parse({
+					config: {
+						delimiter: "\t"
+					},
+					complete: function(assignments) {
+						console.log("Read assignments:", assignments);
+						
+						//d3.select("div#focus_plot").
+						var selection = d3.select("#focus_plot .focus");
+						
+						// Plot labels on the element.
+						var assignArray = assignments.results.rows;
+						for(var i = 0; i < assignArray.length; i++) {
+							var mz_range = [assignArray[i]["MZ"] * (1.0 - ppm * 1e-6), assignArray[i]["MZ"] * (1.0 + ppm * 1e-6)];
+							// Apply the dimension.
+							dataByMZ.filter(mz_range);
+							
+							console.log("Rest size:", data_filter.size());
+							
+							// Plot the line and label for the corresponding peak.
+							// Basic idea:
+							// 1. Plot the line above the peak.
+							// 2. Plot the labels in a greedy style.
+							
+							// Remove all filters.
+							dataByMZ.filterAll();
+							
+							
+						}
+					}
+				});
+		
 			}
 		});
+		
+
 	});
 	
-	// 2. Render the data using canvas
-	function render(results) {
-		var canvas = new fabric.Canvas("canvas");
-	}
+
+	// 2. Load labels
+	$().click( function() {
+	});
 	
 	// 3. Plot the svg framework using svg
-	function svgFramework(results) {
-		
-		var selection = d3.select("body");
-		
-		var focus_svg = new SvgObj(margin);
-		focus_svg.createSVG(results, selection, "focus");
-		
-		var context_svg = new SvgObj(margin2);
-		context_svg.createSVG(results, selection, "context");
-		
-		/*console.log("Parse results:", results);
-		var sci_notation = d3.format("e");
-		
-		var scale_x = d3.scale.linear().range([0, width]),
-			scale_x2 = d3.scale.linear().range([0, width]),
-			scale_y = d3.scale.linear().range([height, 0]),
-			scale_y2 = d3.scale.linear().range([height2, 0]);
-
-		var xAxis = d3.svg.axis().scale(scale_x).orient("bottom"),
-			xAxis2 = d3.svg.axis().scale(scale_x2).orient("bottom"),
-			yAxis = d3.svg.axis().scale(scale_y).orient("left").tickFormat(sci_notation);
+	function multiPlot(results, selection, size, class_str) {
+		this.scale = new ScaleObj(results, size);
+		this.svgobj = new SvgObj(this.scale, selection, class_str);
+		this.canvasobj = new CanvasObj(this.scale, selection, class_str);
 			
-		var context_svg = d3.select("body").append("svg")
-			.attr("class", "context")
-			.attr("width", width + margin.left + margin.right)
-			.attr("height", height2 + margin.top + margin.bottom);
+		this.addBrush = function(target_plot){
+			var context_scale = this.scale;			
+			var brush = d3.svg.brush()
+				.x(this.scale.scale_x) // The scale of the context.
+				.on("brush", function() {
+					// The alteration should also affect focus_canvas.
+					var scale = target_plot.scale;
+					//console.log(context_scale.scale_x.domain());
+					
+					scale.scale_x.domain(brush.empty() ? context_scale.scale_x.domain() : brush.extent());
+					//console.log(scale.scale_x.domain());
+					
+					// Redraw the axis.
+					//console.log(target_plot.svgobj.svg.select("x axis"));
+					// Locate target plot svg.
+					d3.select("#focus_plot .x.axis").call(scale.xAxis);
+					
+					// Redraw the peaks.
+					target_plot.canvasobj.renderCanvas();
+					console.log("Rescale canvas");
+		});
+			// Append brush event
+			this.svgobj.svg.append("g")
+				.attr("class", "x brush")
+				.call(brush)
+				.selectAll('rect')
+				.attr("y", -6) // Man, those shifts should be controlled by css.
+				.attr("height", this.scale.height + 7);
 			
-		var focus_svg = d3.select("body").append("svg")
-			.attr("class", "focus")
-			.attr("width", width + margin2.left + margin2.right)
-			.attr("height", height + margin2.top + margin2.bottom);
-
-		// It constrains the region where the data can be visualized.
-		// Any element beyond that is not visualized.
-		context_svg.append("defs").append("clipPath")
-			.attr("id", "clip")
-			.append("rect")
-			.attr("width", width)
-			.attr("height", height);
-
-		var focus = focus_svg.append("g")
-			.attr("class", "focus")
-			.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+		}
 		
-		var context = context_svg.append("g")
-                 .attr("class", "context")
-                 .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
-				 
-		scale_x.domain([0.9 * d3.min(results.rows.map(function(d) { return d["MZ"]; })), 1.1 * d3.max(results.rows.map(function(d) { return d["MZ"]; }))]);
-		scale_x2.domain(scale_x.domain());
-		//console.log(scale_x.domain());
-		scale_y.domain([0, 1.1 * d3.max(results.rows.map(function(d) { return d["Intensity"]; }))]);
-		//console.log(scale_y.domain());
+		// Private method
+	 	
 		
-		// The group of axis x
-		focus.append("g")
-		.attr("class", "x axis")
-		.attr("transform", "translate(0," + height + ")")
-		.call(xAxis);
-		
-		// The group of axis y	  
-		focus.append("g")
-		.attr("class", "y axis")
-		.call(yAxis);
-		
-		context.append("g")
-		.attr("class", "x axis")
-		.attr("transform", "translate(0," + height2 + ")")
-		.call(xAxis); */
 	}
 
+	// Modification of this object will be spead into svgObj and canvasObj.
+	function ScaleObj(data, size) {
+		this.width = size.w;	
+		this.height = size.h;
+		this.y_notation = d3.format("e");
+		this.data = data;
+		
+		this.scale_x = d3.scale.linear().range([0, size.w - margin.left - margin.right]);
+		this.scale_y = d3.scale.linear().range([size.h - margin.top - margin.bottom, 0]);
+		
+		this.xAxis = d3.svg.axis().scale(this.scale_x).orient("bottom");
+		this.yAxis = d3.svg.axis().scale(this.scale_y).orient("left").tickFormat(this.y_notation);
+		
+		this.updateMarginalWidth = function(w) {
+			this.width = w;
+		}
+		this.updateMarginalHeight = function(h) {
+			this.height = h;
+		}
+	}
+	
+	function SvgObj(common, selection, svg_class) {
+		// Private variable
+		var scale = common;
+
+		// 1. data is an object for passing the information.
+		// 2. selection is for selected object in the document.
+		// 3. svg_class is for the class of the svg element.  It is usually for differentiation 
+		// between multiple svg elements.
+		
+		// Update the domain of axis
+		scale.scale_x.domain([0.9 * d3.min(scale.data.rows.map(function(d) { return d["MZ"]; })), 1.1 * d3.max(scale.data.rows.map(function(d) { return d["MZ"]; }))]);
+		scale.scale_y.domain([0, 1.1 * d3.max(scale.data.rows.map(function(d) { return d["Intensity"]; }))]);
+		
+		//console.log("Data", data);
+		console.log("Width", scale.width);
+		console.log("Height", scale.height);
+		
+		// Create svg canvas
+		this.svg = selection.append("svg")
+			.attr("class", "spectrum")
+			.attr("width", scale.width)
+			.attr("height", scale.height)
+			.append("g")
+			.attr("class", svg_class)
+			.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+		
+		this.svg.append("g")
+			.attr("class", "x axis")
+			.attr("transform", "translate(0," + (scale.height - margin.top - margin.bottom) + ")")
+			.call(scale.xAxis);
+		
+		// The group of axis y	  
+		this.svg.append("g")
+			.attr("class", "y axis")
+			.call(scale.yAxis);
+			
+		this.addLabels = function(label_list) {
+			// 1. Add lines of the assignments.
+			// 2. Add labels of the assignments.
+			// 3. Add effect allowing the pan of the label.
+		}
+		
+		this.updateLabelParameter = function() {
+			
+		}
+	}
+	
+	function CanvasObj(common, selection, canvas_class) {
+		var scale = common;
+		
+		var id = 'canvas_' + canvas_class;
+		var viewport = selection.append('canvas')
+			.attr("width", scale.width)
+			.attr("height", scale.height)
+			.attr("id", 'canvas_' + canvas_class)
+			.attr("class", canvas_class)
+		var canvas = viewport.node().getContext('2d');
+		canvas.translate(margin.left, margin.top);
+		//console.log("Translate to:", margin.left, scale.height - margin.bottom);
+		
+		// 2. Render the data using canvas.
+	// The interpolation is based on the scale carried by svg.
+	// The plotting position is on the canvas
+		this.renderCanvas = function() {
+			//console.log(scale);
+			console.log(canvas);
+
+			canvas.save();
+			canvas.setTransform(1,0,0,1,0,0);
+			canvas.clearRect(0, 0, scale.width, scale.height);
+			canvas.restore();
+			
+			console.log("Clear the canvas!");
+			
+			var dataArray = scale.data.rows;
+			for(var i = 0; i < dataArray.length; i++) {
+				
+				// Only draw peaks within the right range.
+				var extent_x = scale.scale_x.domain();
+				var x1 = scale.scale_x(dataArray[i]["MZ"]),
+					y1 = scale.scale_y(dataArray[i]["Intensity"]),
+					x2 = scale.scale_x(dataArray[i]["MZ"]),
+					y2 = scale.height - margin.bottom - margin.top;
+				if(dataArray[i]["MZ"] < extent_x[0] || dataArray[i]["MZ"] > extent_x[1] || Math.abs(y1 - y2) < 5) {
+					continue;
+				}
+				canvas.beginPath();
+				canvas.moveTo(x1, y1);
+				canvas.lineTo(x2, y2);
+				canvas.stroke();
+				
+/*				console.log("MZ:", dataArray[i]["MZ"]);
+				console.log("Intensity:", dataArray[i]["Intensity"]);
+				console.log("x1", x1);
+				console.log("y1", y1);
+				console.log("x2", x2);
+				console.log("y2", y2);*/
+			}
+			
+			
+			
+		}
+		
+		this.renderCanvas();
+		//this.canvas.clearRect(0, 0, scale.width, scale.height);
+
+	}
 });
 
 
