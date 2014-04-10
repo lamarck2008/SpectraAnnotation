@@ -89,7 +89,7 @@ $(function() {
 				console.log("Data size:", data_filter.size());
 				
 				// Check the dimension of MZ
-				var dataByMZ = data_filter.dimention(function(d) {return d.MZ;});
+				var dataByMZ = data_filter.dimension(function(d) {return d.MZ;});
 				
 				$('#assignment:file').parse({
 					config: {
@@ -105,15 +105,43 @@ $(function() {
 						var assignArray = assignments.results.rows;
 						for(var i = 0; i < assignArray.length; i++) {
 							var mz_range = [assignArray[i]["MZ"] * (1.0 - ppm * 1e-6), assignArray[i]["MZ"] * (1.0 + ppm * 1e-6)];
+							
 							// Apply the dimension.
 							dataByMZ.filter(mz_range);
-							
+							console.log("MZ range:", mz_range);
 							console.log("Rest size:", data_filter.size());
 							
 							// Plot the line and label for the corresponding peak.
 							// Basic idea:
-							// 1. Plot the line above the peak.
-							// 2. Plot the labels in a greedy style.
+							// 1. Get the peak.  TBD: If there is more than one peaks correponding to the label, arbitrarily choose the first one.
+							var matched_pk = dataByMZ.top(1)[0];
+							var label = d3.select("#focus_plot .label");
+							
+							// 2. Convert the MZ and Intensity value into position on the canvas. 
+							var x = focus_plot.svgobj.getXCoordinate(matched_pk.MZ),
+								y = focus_plot.svgobj.getYCoordinate(matched_pk.Intensity),
+								max_y = focus_plot.svgobj.getYHeight();
+								
+							console.log("x", x);
+							console.log("y", y);
+							console.log("max_y", max_y);
+							
+							label.append("text")
+								.text(assignArray[i]["Assignment"])
+								.attr("x", x) // Set the coordinates of the text labels.  This can be adjusted in the future.
+								.attr("y", y * (1-0.3));
+							
+							// 2. Create the lines connecting the peak to the labels
+							label.append("line")
+								.attr("x1", x)
+								.attr("y1", y * (1 - 0.27))
+								.attr("x2", x)
+								.attr("y2", y * (1 - 0.05))
+								.style("stroke-dasharray", ("3, 3"))
+								.style("stroke", "#000")
+								.style("stroke-width", 1);
+							
+							// 3. Adding behavior for the labels.
 							
 							// Remove all filters.
 							dataByMZ.filterAll();
@@ -195,6 +223,8 @@ $(function() {
 		this.updateMarginalHeight = function(h) {
 			this.height = h;
 		}
+		
+
 	}
 	
 	function SvgObj(common, selection, svg_class) {
@@ -223,6 +253,7 @@ $(function() {
 			.attr("class", svg_class)
 			.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 		
+		// Create g tag for grouping x axis elements.
 		this.svg.append("g")
 			.attr("class", "x axis")
 			.attr("transform", "translate(0," + (scale.height - margin.top - margin.bottom) + ")")
@@ -233,6 +264,10 @@ $(function() {
 			.attr("class", "y axis")
 			.call(scale.yAxis);
 			
+		// Create g tag for grouping line and label.
+		this.svg.append("g")
+			.attr("class", "label");
+			
 		this.addLabels = function(label_list) {
 			// 1. Add lines of the assignments.
 			// 2. Add labels of the assignments.
@@ -242,6 +277,19 @@ $(function() {
 		this.updateLabelParameter = function() {
 			
 		}
+		
+		this.getXCoordinate = function(x) {
+			return scale.scale_x(x);
+		}
+		
+		this.getYCoordinate = function(y) {
+			return scale.scale_y(y);
+		}
+		
+		this.getYHeight = function() {
+			return scale.height - margin.top - margin.bottom;
+		}
+		
 	}
 	
 	function CanvasObj(common, selection, canvas_class) {
@@ -288,12 +336,12 @@ $(function() {
 				canvas.lineTo(x2, y2);
 				canvas.stroke();
 				
-/*				console.log("MZ:", dataArray[i]["MZ"]);
-				console.log("Intensity:", dataArray[i]["Intensity"]);
-				console.log("x1", x1);
-				console.log("y1", y1);
-				console.log("x2", x2);
-				console.log("y2", y2);*/
+				console.log("Canvas MZ:", dataArray[i]["MZ"]);
+				console.log("Canvas Intensity:", dataArray[i]["Intensity"]);
+				console.log("Canvas x1", x1);
+				console.log("Canvas y1", y1);
+				console.log("Canvas x2", x2);
+				console.log("Canvas y2", y2);
 			}
 			
 			
