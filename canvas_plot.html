@@ -18,6 +18,10 @@ svg {
   stroke: #000;
   shape-rendering: crispEdges;
 }
+line.dragging，
+text.dragging {
+	stroke: red;
+}
 
 .brush .extent {
   stroke: #fff;
@@ -55,6 +59,7 @@ $(function() {
 	width = size1.w - margin.left - margin.right;
 	global_scale_x = d3.scale.linear().range([0, width]);
 	var ppm = 1;
+
 	//var focus_canvas = new fabric.Canvas('focus_canvas');
 	//var context_canvas = new fabric.Canvas('context_canvas');
 	
@@ -91,12 +96,17 @@ $(function() {
 				// Check the dimension of MZ
 				var dataByMZ = data_filter.dimension(function(d) {return d.MZ;});
 				
+
+				
 				$('#assignment:file').parse({
 					config: {
 						delimiter: "\t"
 					},
 					complete: function(assignments) {
 						console.log("Read assignments:", assignments);
+						
+						var labeldrag = d3.behavior.drag()
+							.on("drag", dragmove);
 						
 						//d3.select("div#focus_plot").
 						var selection = d3.select("#focus_plot .focus");
@@ -129,7 +139,9 @@ $(function() {
 							label.append("text")
 								.text(assignArray[i]["Assignment"])
 								.attr("x", x) // Set the coordinates of the text labels.  This can be adjusted in the future.
-								.attr("y", y * (1-0.3));
+								.attr("y", y * (1-0.3))
+								.attr("class", 'draggable')
+								.call(labeldrag);
 							
 							// 2. Create the lines connecting the peak to the labels
 							label.append("line")
@@ -148,6 +160,7 @@ $(function() {
 							
 							
 						}
+						//d3.selectAll(".draggable").call(labeldrag);
 					}
 				});
 		
@@ -157,14 +170,10 @@ $(function() {
 
 	});
 	
-
-	// 2. Load labels
-	$().click( function() {
-	});
-	
 	// 3. Plot the svg framework using svg
 	function multiPlot(results, selection, size, class_str) {
 		this.scale = new ScaleObj(results, size);
+		
 		this.svgobj = new SvgObj(this.scale, selection, class_str);
 		this.canvasobj = new CanvasObj(this.scale, selection, class_str);
 			
@@ -185,9 +194,12 @@ $(function() {
 					// Locate target plot svg.
 					d3.select("#focus_plot .x.axis").call(scale.xAxis);
 					
-					// Redraw the peaks.
+					// Redraw the peaks on the canvas.
 					target_plot.canvasobj.renderCanvas();
 					console.log("Rescale canvas");
+					
+					//  TBD: Redraw the labels on the SVG.
+					
 		});
 			// Append brush event
 			this.svgobj.svg.append("g")
@@ -267,16 +279,6 @@ $(function() {
 		// Create g tag for grouping line and label.
 		this.svg.append("g")
 			.attr("class", "label");
-			
-		this.addLabels = function(label_list) {
-			// 1. Add lines of the assignments.
-			// 2. Add labels of the assignments.
-			// 3. Add effect allowing the pan of the label.
-		}
-		
-		this.updateLabelParameter = function() {
-			
-		}
 		
 		this.getXCoordinate = function(x) {
 			return scale.scale_x(x);
@@ -336,12 +338,12 @@ $(function() {
 				canvas.lineTo(x2, y2);
 				canvas.stroke();
 				
-				console.log("Canvas MZ:", dataArray[i]["MZ"]);
+/*				console.log("Canvas MZ:", dataArray[i]["MZ"]);
 				console.log("Canvas Intensity:", dataArray[i]["Intensity"]);
 				console.log("Canvas x1", x1);
 				console.log("Canvas y1", y1);
 				console.log("Canvas x2", x2);
-				console.log("Canvas y2", y2);
+				console.log("Canvas y2", y2);*/
 			}
 			
 			
@@ -352,6 +354,15 @@ $(function() {
 		//this.canvas.clearRect(0, 0, scale.width, scale.height);
 
 	}
+	
+	function dragmove(d) {
+  		d3.select(this)
+      		.attr("x", d3.event.x)
+      		.attr("y", d3.event.y);
+		// Do something with the group (including the line)
+		d3.select(this.parentNode).select("line");
+	}
+
 });
 
 
