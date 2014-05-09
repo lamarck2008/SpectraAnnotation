@@ -355,6 +355,17 @@ $(function() {
 
 	}
 	
+	// Label and appended peak/line information.
+	function labelObj() {
+		this.pk_x = 1;
+		this.pk_y = 1;
+		this.line_x = 1;
+		this.line_y = 1;
+		this.label_x = 1;
+		this.label_y = 1;
+		this.label_size = [1, 1];
+	}
+	
 	function dragmove(d) {
   		d3.select(this)
       		.attr("x", d3.event.x)
